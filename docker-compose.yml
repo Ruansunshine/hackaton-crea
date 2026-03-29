@@ -1,0 +1,192 @@
+# =============================================================
+# MVP — Motor RAGFlow · Análise de ART
+# =============================================================
+
+networks:
+  mvp:
+    driver: bridge
+
+volumes:
+  n8n_data:
+  redis_data:
+  chroma_data:
+  postgres_data:
+  portainer_data:
+
+# =============================================================
+# SERVICES
+# Ordem: infra → aplicação → gestão
+# =============================================================
+services:
+
+  # -----------------------------------------------------------
+  # 1. REDIS — Sessão + fila
+  #    Acesse: localhost:6379
+  # -----------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: always
+    ports:
+      - "6379:6379"
+    networks:
+      - mvp
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
+  # -----------------------------------------------------------
+  # 2. POSTGRES — Banco de dados relacional
+  #    Acesse: localhost:5432
+  # -----------------------------------------------------------
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    restart: always
+    ports:
+      - "5432:5432"
+    networks:
+      - mvp
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: mvp
+      POSTGRES_USER: mvp
+      POSTGRES_PASSWORD: mvp
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mvp -d mvp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # -----------------------------------------------------------
+  # 3. CHROMADB — Vector store para RAG
+  #    Acesse: http://localhost:8000
+  # -----------------------------------------------------------
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: chromadb
+    restart: always
+    ports:
+      - "8000:8000"
+    networks:
+      - mvp
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      IS_PERSISTENT: "TRUE"
+      ANONYMIZED_TELEMETRY: "FALSE"
+
+  # -----------------------------------------------------------
+  # 4. N8N — Orquestrador de fluxos
+  #    Acesse: http://localhost:5678
+  #    Login:  definido no .env
+  # -----------------------------------------------------------
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: always
+    ports:
+      - "5678:5678"
+    networks:
+      - mvp
+    volumes:
+      - n8n_data:/home/node/.n8n
+    environment:
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD}
+      N8N_SECURE_COOKIE: "false"
+      WEBHOOK_URL: http://n8n:5678
+      GENERIC_TIMEZONE: America/Sao_Paulo
+      TZ: America/Sao_Paulo
+      QUEUE_BULL_REDIS_HOST: redis
+      QUEUE_BULL_REDIS_PORT: "6379"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - redis
+
+  # -----------------------------------------------------------
+  # 5. OCR — Microserviço Python + Tesseract
+  #    Acesse: http://localhost:5000
+  # -----------------------------------------------------------
+  ocr:
+    image: python:3.11-slim
+    container_name: ocr
+    restart: always
+    ports:
+      - "5000:5000"
+    networks:
+      - mvp
+    volumes:
+      - ./ocr_service:/app
+    working_dir: /app
+    command: >
+      bash -c "
+        apt-get update -qq &&
+        apt-get install -y -qq tesseract-ocr tesseract-ocr-por poppler-utils curl &&
+        pip install flask pillow pytesseract pdf2image -q &&
+        python server.py
+      "
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # -----------------------------------------------------------
+  # 6. RAG SERVICE — Pipeline extração + busca + geração
+  #    Acesse: http://localhost:8001
+  # -----------------------------------------------------------
+  rag:
+    build:
+      context: ./rag-service
+      dockerfile: Dockerfile
+    container_name: rag
+    restart: always
+    ports:
+      - "8001:8000"
+    networks:
+      - mvp
+    volumes:
+      - ./rag-service:/app
+    env_file:
+      - ./rag-service/.env
+    depends_on:
+      - chromadb
+
+  # -----------------------------------------------------------
+  # 7. INTERFACE — Demo Motor RAGFlow
+  #    Acesse: http://localhost:8081
+  # -----------------------------------------------------------
+  interface:
+    build: ./interface
+    container_name: interface
+    restart: always
+    ports:
+      - "8081:8081"
+    networks:
+      - mvp
+    environment:
+      RAGFLOW_URL: ${RAGFLOW_URL}
+      N8N_URL: ${N8N_URL}
+    depends_on:
+      - n8n
+      - rag
+
+  # -----------------------------------------------------------
+  # 8. PORTAINER — Gerenciamento visual de containers
+  #    Acesse: http://localhost:8088
+  # -----------------------------------------------------------
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: always
+    ports:
+      - "8088:9000"
+    networks:
+      - mvp
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data

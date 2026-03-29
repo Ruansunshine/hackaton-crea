@@ -1,0 +1,126 @@
+<!-- Interface removida -->
+  if (el) el.classList.add('active');
+
+  if (tipo === 'pendente') {
+    set('assinatura', 'nao');
+    set('cpf_contratante', 'sim');
+    set('art_data', '2025-10-30');
+    set('atestado_data', '2025-10-30');
+    set('end_art', 'Zona Rural, Lote 14, Município de São Domingos do Maranhão – MA');
+    set('end_atestado', 'Zona Rural, Lote 14, Município de São Domingos do Maranhão – MA');
+    set('cpf_atestado', 'sim');
+  } else if (tipo === 'divergencia') {
+    <script type="module" src="/static/js/main.js"></script>
+
+  if (assinatura === 'nao') {
+    temP = true;
+    itens.push({ t: 'p', tipo: 'PENDÊNCIA', cat: '', desc: 'Ausência de assinatura de engenheiro civil vinculado ao contratante', acao: 'Anexar declaração de profissional da área (civil), conforme §1º do Art. 59 da Resolução 1137 do CONFEA' });
+  }
+  if (cpfC === 'nao') {
+    temP = true;
+    itens.push({ t: 'p', tipo: 'PENDÊNCIA', cat: '', desc: 'CPF do contratante ausente junto à assinatura', acao: 'Incluir CPF do contratante no documento de forma legível' });
+  } else {
+    itens.push({ t: 's', tipo: 'SANADO', cat: '', desc: 'CPF do contratante identificado e presente', acao: '' });
+  }
+  if (artData && atData && artData !== atData) {
+    temD = true;
+    const dA = artData.split('-').reverse().join('/');
+    const dAt = atData.split('-').reverse().join('/');
+    itens.push({ t: 'd', tipo: 'DIVERGÊNCIA', cat: '· DATA', desc: `Data na ART (${dA}) não corresponde ao atestado (${dAt})`, acao: 'Verificar e alinhar datas entre os documentos' });
+  }
+  if (endA !== endAt) {
+    temD = true;
+    itens.push({ t: 'd', tipo: 'DIVERGÊNCIA', cat: '· LOCAL', desc: 'Endereço do atestado não corresponde ao da ART', acao: 'Corrigir endereço completo — incluindo zona rural, lote e município' });
+  }
+  if (!temP && !temD) {
+    itens.push({ t: 's', tipo: 'VALIDADO', cat: '', desc: 'Todos os metadados analisados sem inconsistências', acao: '' });
+  }
+
+  let status, sClass, svClass, sIcon;
+  if (temP && temD) { status = 'PENDENTE / DIVERGENTE'; sClass = 'status-divergente'; svClass = 'sv-divergente'; sIcon = '⚠'; }
+  else if (temP) { status = 'PENDENTE'; sClass = 'status-pendente'; svClass = 'sv-pendente'; sIcon = '⚑'; }
+  else if (temD) { status = 'DIVERGENTE'; sClass = 'status-divergente'; svClass = 'sv-divergente'; sIcon = '⚠'; }
+  else { status = 'APROVADO'; sClass = 'status-aprovado'; svClass = 'sv-aprovado'; sIcon = '✓'; }
+
+  const iWrap = { p: 'iw-p', d: 'iw-d', s: 'iw-s' };
+  const iType = { p: 'it-p', d: 'it-d', s: 'it-s' };
+  const iItem = { p: 'item-p', d: 'item-d', s: 'item-s' };
+  const iIcon = { p: '⚑', d: '⚠', s: '✓' };
+
+  let itensHtml = itens.map((it, idx) => `
+    <div class="item ${iItem[it.t]}" style="animation-delay:${idx * 0.1}s">
+      <div class="item-icon-wrap ${iWrap[it.t]}">${iIcon[it.t]}</div>
+      <div style="flex:1">
+        <div class="item-tipo ${iType[it.t]}">${it.tipo} ${it.cat}</div>
+        <div class="item-desc">${it.desc}</div>
+        ${it.acao ? `<div class="item-acao">→ ${it.acao}</div>` : ''}
+      </div>
+    </div>
+  `).join('');
+
+  const jsonObj = {
+    status_geral: status,
+    art: numArt,
+    analise: itens.map(i => ({
+      tipo: i.t === 'p' ? 'pendencia' : i.t === 'd' ? 'divergencia' : 'sanado',
+      ...(i.cat ? { categoria: i.cat.replace('· ','') } : {}),
+      descricao: i.desc,
+      ...(i.acao ? { acao: i.acao } : {})
+    })),
+    confianca: 'alta'
+  };
+
+  window._json = JSON.stringify(jsonObj, null, 2);
+
+  function colorJson(str) {
+    return str
+      .replace(/"([^"]+)":/g, '<span class="j-key">"$1"</span>:')
+      .replace(/: "([^"]+)"/g, (m, v) => {
+        if (v === 'pendencia') return `: <span class="j-amber">"${v}"</span>`;
+        if (v === 'divergencia' || v.includes('DIVERG') || v.includes('PENDENT')) return `: <span class="j-red">"${v}"</span>`;
+        if (v === 'sanado' || v === 'alta' || v === 'APROVADO') return `: <span class="j-str">"${v}"</span>`;
+        return `: <span class="j-str">"${v}"</span>`;
+      });
+  }
+
+  document.getElementById('proc-msg').style.display = 'none';
+  document.getElementById('diag').innerHTML = `
+    <div class="status-row ${sClass}">
+      <div class="status-icon">${sIcon}</div>
+      <div>
+        <div class="status-label">Status geral</div>
+        <div class="status-value ${svClass}">${status}</div>
+      </div>
+      <div class="status-meta">
+        <div class="status-meta-label">Confiança</div>
+        <div class="status-meta-val" style="color:var(--green)">Alta</div>
+      </div>
+      <div class="status-meta">
+        <div class="status-meta-label">Regras aplicadas</div>
+        <div class="status-meta-val">${itens.length}</div>
+      </div>
+    </div>
+
+    <div class="items-label">Diagnóstico detalhado</div>
+    ${itensHtml}
+
+    <div class="json-wrap">
+      <div class="json-header">
+        <div class="json-title">saida_estruturada.json</div>
+        <button class="btn-copy" onclick="copiarJson()">copiar</button>
+      </div>
+      <div class="json-body" id="json-body">${colorJson(window._json)}</div>
+    </div>
+  `;
+}
+
+function copiarJson() {
+  navigator.clipboard.writeText(window._json).then(() => {
+    const b = document.querySelector('.btn-copy');
+    b.textContent = 'copiado ✓';
+    setTimeout(() => b.textContent = 'copiar', 2000);
+  });
+}
+</script>
+</body>
+</html>

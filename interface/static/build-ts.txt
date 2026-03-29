@@ -1,0 +1,3 @@
+// Simple build script for TypeScript (for demo)
+// Run: npx tsc --project static/tsconfig.json
+// Or add to Dockerfile if desejado

@@ -1,0 +1,66 @@
+# regras_ragflow.yaml
+# Regras dinâmicas para análise de ARTs no motor RAGFlow
+
+regras:
+  - id: assinatura_tecnica_obrigatoria
+    descricao: "Assinatura técnica obrigatória do engenheiro civil vinculado ao contratante."
+    condicao:
+      campo: assinaturas
+      tipo: ausencia
+      filtro: engenheiro_civil_contratante
+    acao:
+      tipo: pendente
+      mensagem: "Anexar declaração de profissional da área (civil), conforme §1º do Art. 59 da Resolução 1137 do CONFEA"
+
+  - id: cpf_contratante
+    descricao: "Verifica presença do CPF junto à assinatura do contratante."
+    condicao:
+      campo: cpf_contratante
+      tipo: ausencia
+    acao:
+      tipo: pendente
+      mensagem: "CPF do contratante ausente junto à assinatura."
+    acao_sanado:
+      tipo: sanado
+      mensagem: "CPF do contratante presente."
+
+  - id: divergencia_datas
+    descricao: "Divergência entre datas do atestado e da ART."
+    condicao:
+      campo: datas
+      tipo: divergencia
+      campos_relacionados:
+        - data_atestado
+        - data_art
+    acao:
+      tipo: divergencia
+      categoria: data
+      mensagem: "Datas inconsistentes entre ART e atestado."
+
+  - id: divergencia_local
+    descricao: "Divergência entre local informado na ART e no atestado."
+    condicao:
+      campo: local
+      tipo: divergencia
+      campos_relacionados:
+        - local_art
+        - local_atestado
+    acao:
+      tipo: divergencia
+      categoria: local
+      mensagem: "Local inconsistente entre ART e atestado."
+    acao_sanado:
+      tipo: sanado
+      mensagem: "Divergência de local sanada."
+
+  - id: endereco_incompleto
+    descricao: "Endereço descrito no atestado não corresponde ao da ART."
+    condicao:
+      campo: endereco
+      tipo: incompleto
+      campos_relacionados:
+        - endereco_atestado
+        - endereco_art
+    acao:
+      tipo: pendente
+      mensagem: "Endereço do atestado não corresponde ao da ART. Exigir correspondência completa, incluindo zona rural, município, etc."
